@@ -2,6 +2,10 @@
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
 # Binaries for programs and plugins
+# Go build artifacts
+/bin/
+/build/
+/dist/
 *.exe
 *.exe~
 *.dll
@@ -30,3 +34,44 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+# Go test binaries and coverage
+*.test
+*.out
+coverage.*
+coverage/
+
+# Go workspace files
+go.work
+go.work.sum
+
+vendor/
+
+# Environment files
+.env
+.env.*
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+
+# Database / local state
+data/
+*.db
+
+# Docker
+docker-compose.override.yml
