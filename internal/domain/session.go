@@ -7,9 +7,9 @@ import (
 
 type Session struct {
 	ID         string
-	userID     string
+	UserID     string
 	TargetSec  int
-	steps      []Step
+	Steps      []Step
 	CurrentIdx int
 	StartedAt  time.Time
 	Completed  bool

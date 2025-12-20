@@ -1,0 +1,24 @@
+package runner
+
+import "sync"
+
+type SessionManager struct {
+	mu      sync.Mutex
+	runners map[string]*SessionManager
+}
+
+func NewSessionManager() SessionManager {
+
+}
+
+func (m *SessionManager) StartSession(r *sessionRunner) {
+
+}
+
+func (m *SessionManager) StopSession(sessionID string) {
+
+}
+
+func (m *SessionManager) GetSession(sessionID string) *sessionRunner {
+
+}
