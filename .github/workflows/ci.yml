@@ -22,6 +22,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           version: latest
-
+        env:
+          ACTIONS_RUNNER_DEBUG: false
       - name: Run tests
         run: go test ./...
