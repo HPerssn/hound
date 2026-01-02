@@ -62,3 +62,17 @@ func GenerateSteps(targetSec int, r *rand.Rand) []Step {
 
 	return steps
 }
+
+func NewSession(id string, userID string, targetSec int) *Session {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	return &Session{
+		ID:         id,
+		UserID:     userID,
+		TargetSec:  targetSec,
+		Steps:      GenerateSteps(targetSec, r),
+		CurrentIdx: 0,
+		StartedAt:  time.Now(),
+		Completed:  false,
+	}
+}
