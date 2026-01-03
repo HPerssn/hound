@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -25,6 +26,7 @@ func StreamSessionEvents(manager *runner.SessionManager) http.HandlerFunc {
 		events, ok := manager.Events(id)
 		if !ok {
 			http.Error(w, "session not found", http.StatusNotFound)
+			return
 		}
 
 		for {
@@ -35,10 +37,7 @@ func StreamSessionEvents(manager *runner.SessionManager) http.HandlerFunc {
 				}
 
 				data, _ := json.Marshal(step)
-				w.Write([]byte("data: "))
-				w.Write(data)
-				w.Write([]byte("\n\n"))
-
+				fmt.Fprintf(w, "data: %s\n\n", data)
 				flusher.Flush()
 
 			case <-r.Context().Done():

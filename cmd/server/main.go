@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/hperssn/hound/internal/domain"
-	httpapi "github.com/hperssn/hound/internal/http"
+	"github.com/hperssn/hound/internal/http"
 	"github.com/hperssn/hound/internal/runner"
 )
 
