@@ -8,6 +8,13 @@ import (
 	"github.com/hperssn/hound/internal/domain"
 )
 
+type StepEvent struct {
+	Index     int  `json:"index"`
+	Duration  int  `json:"duration"`
+	Elapsed   int  `json:"elapsed"`
+	Completed bool `json:"completed"`
+}
+
 type sessionRunner struct {
 	mu sync.Mutex
 
@@ -16,7 +23,7 @@ type sessionRunner struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	events chan domain.Step
+	events chan StepEvent
 }
 
 func NewSessionRunner(s *domain.Session) *sessionRunner {
@@ -25,26 +32,35 @@ func NewSessionRunner(s *domain.Session) *sessionRunner {
 		session: s,
 		ctx:     ctx,
 		cancel:  cancel,
-		events:  make(chan domain.Step, len(s.Steps)), //buffered to avoid blocking runner when sending
+		events:  make(chan StepEvent, len(s.Steps)), //buffered to avoid blocking runner when sending
 	}
 }
 
 func (r *sessionRunner) Start() {
 	go func() {
-		for i, step := range r.session.Steps {
+		for i := range r.session.Steps {
+
+			r.mu.Lock()
+			r.session.CurrentIdx = i
+			r.session.Steps[i].StartedAt = time.Now()
+			started := r.session.Steps[i].StartedAt
+			r.mu.Unlock()
 
 			select {
-			case <-time.After(time.Duration(step.Duration) * time.Second):
+			case <-time.After(time.Duration(r.session.Steps[i].Duration) * time.Second):
 				r.mu.Lock()
 				r.session.Steps[i].Completed = true
+				step := r.session.Steps[i]
 				r.mu.Unlock()
 
-				r.mu.Lock()
-				updated := r.session.Steps[i]
-				r.mu.Unlock()
+				elapsed := int(started.Sub(r.session.StartedAt).Seconds())
 
-				r.events <- updated
-
+				r.events <- StepEvent{
+					Index:     step.Index,
+					Duration:  step.Duration,
+					Elapsed:   elapsed,
+					Completed: step.Completed,
+				}
 			case <-r.ctx.Done():
 				return
 			}
@@ -60,7 +76,7 @@ func (r *sessionRunner) Stop() {
 	close(r.events)
 }
 
-func (r *sessionRunner) Events() <-chan domain.Step {
+func (r *sessionRunner) Events() <-chan StepEvent {
 	return r.events
 
 }

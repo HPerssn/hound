@@ -23,7 +23,7 @@ func NewSessionManager() *SessionManager {
 	}
 }
 
-func (m *SessionManager) Events(id string) (<-chan domain.Step, bool) {
+func (m *SessionManager) Events(id string) (<-chan StepEvent, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
