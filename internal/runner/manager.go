@@ -23,6 +23,18 @@ func NewSessionManager() *SessionManager {
 	}
 }
 
+func (m *SessionManager) Events(id string) (<-chan domain.Step, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	r, ok := m.sessions[id]
+	if !ok {
+		return nil, false
+	}
+
+	return r.Events(), true
+}
+
 func (m *SessionManager) StartSession(s *domain.Session) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -39,6 +51,7 @@ func (m *SessionManager) StartSession(s *domain.Session) error {
 }
 
 func (m *SessionManager) StopSession(id string) error {
+
 	m.mu.Lock()
 	r, exists := m.sessions[id]
 	m.mu.Unlock()

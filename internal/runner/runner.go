@@ -39,7 +39,12 @@ func (r *sessionRunner) Start() {
 				r.session.Steps[i].Completed = true
 				r.mu.Unlock()
 
-				r.events <- step
+				r.mu.Lock()
+				updated := r.session.Steps[i]
+				r.mu.Unlock()
+
+				r.events <- updated
+
 			case <-r.ctx.Done():
 				return
 			}

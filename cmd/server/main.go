@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/hperssn/hound/internal/domain"
+	httpapi "github.com/hperssn/hound/internal/http"
 	"github.com/hperssn/hound/internal/runner"
 )
 
@@ -22,6 +23,7 @@ func main() {
 	r.Post("/sessions", startSession(manager))
 	r.Get("/sessions/{id}", getSession(manager))
 	r.Post("/sessions{id}/stop", stopSession(manager))
+	r.Get("/sessions/{id}/events", httpapi.StreamSessionEvents(manager))
 
 	log.Println("listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
