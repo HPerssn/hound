@@ -3,6 +3,7 @@ package runner
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/hperssn/hound/internal/domain"
 )
@@ -19,8 +20,36 @@ type SessionManager struct {
 }
 
 func NewSessionManager() *SessionManager {
-	return &SessionManager{
+	m := &SessionManager{
 		sessions: make(map[string]*sessionRunner),
+	}
+
+	go m.cleanupLoop()
+
+	return m
+}
+
+func (m *SessionManager) cleanupLoop() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		m.cleanupOldSessions()
+	}
+}
+
+func (m *SessionManager) cleanupOldSessions() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	cutoff := time.Now().Add(-1 * time.Hour)
+
+	for id, runner := range m.sessions {
+		sess := runner.Session()
+		if sess.Completed && sess.StartedAt.Before(cutoff) {
+			runner.Stop()
+			delete(m.sessions, id)
+		}
 	}
 }
 
@@ -51,16 +80,16 @@ func (m *SessionManager) StartSession(s *domain.Session) error {
 }
 
 func (m *SessionManager) StopSession(id string) error {
-
 	m.mu.Lock()
-	r, exists := m.sessions[id]
-	m.mu.Unlock()
+	defer m.mu.Unlock()
 
+	r, exists := m.sessions[id]
 	if !exists {
 		return ErrSessionNotFound
 	}
 
 	r.Stop()
+	delete(m.sessions, id)
 	return nil
 }
 
