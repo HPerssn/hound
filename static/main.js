@@ -4,14 +4,16 @@ let sessionData;
 
 async function startSession() {
     const targetMin = parseInt(document.getElementById("targetMin").value, 10);
-    if (!targetMin) return;
+    if (!targetMin) {
+        alert("Please enter target time in minutes");
+    }
     const targetSec = targetMin * 60;
 
     try {
         const res = await fetch('/sessions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ targetSec }) // only targetSec, ID is generated server-side
+            body: JSON.stringify({ targetSec })
         });
 
         if (!res.ok) throw new Error("failed to start session");
@@ -21,6 +23,7 @@ async function startSession() {
 
         displaySteps(sessionData.Steps);
         connectToSession();
+        document.getElementById("activeStep").textContent = `Session ${sessionId} started`;
     } catch (err) {
         console.error(err);
     }
@@ -57,17 +60,12 @@ function connectToSession() {
             if (timerEl) timerEl.textContent = `${data.elapsed}s`;
         }
 
-        if (data.completed) {
-            const timerEl = document.getElementById(`timer-${data.index}`);
-            if (timerEl) timerEl.textContent = "Completed";
-        }
-
-        if (data.type === "done") {
-            document.getElementById("activeStep").textContent = "Session finished";
-        }
     };
 
-    es.onerror = () => es.close();
+    es.onerror = () => {
+        console.log("EventSource connection closed");
+        es.close();
+    }
 }
 
 async function startStep(idx) {
@@ -92,7 +90,18 @@ async function stopStep(idx) {
 
 async function stopSession() {
     if (!sessionId) return;
-    await fetch(`/sessions/${sessionId}/stop`, { method: 'POST' });
-    document.getElementById("activeStep").textContent = "Session stopped";
+    try {
+        const res = await fetch(`/sessions/${sessionId}/stop`, { method: 'POST' });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || "Failed to stop session");
+        }
+
+        document.getElementById("activeStep").textContent = "Session stopped";
+        if (es) es.close();
+    } catch (err) {
+        console.error(err);
+        alert(err.message);
+    }
 }
 
