@@ -40,8 +40,7 @@ func main() {
 func startSession(m *runner.SessionManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			ID        string `json:"id"`
-			TargetSec int    `json:"targetSec"`
+			TargetSec int `json:"targetSec"`
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -49,7 +48,7 @@ func startSession(m *runner.SessionManager) http.HandlerFunc {
 			return
 		}
 
-		s := domain.NewSession(req.ID, "", req.TargetSec)
+		s := domain.NewSession("", "", req.TargetSec)
 
 		if err := m.StartSession(s); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)

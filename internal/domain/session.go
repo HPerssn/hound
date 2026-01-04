@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"github.com/google/uuid"
 	"math/rand"
 	"time"
 )
@@ -64,6 +65,10 @@ func GenerateSteps(targetSec int, r *rand.Rand) []Step {
 }
 
 func NewSession(id string, userID string, targetSec int) *Session {
+	if id == "" {
+		id = uuid.New().String()
+	}
+
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	return &Session{

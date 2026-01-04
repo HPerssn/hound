@@ -1,57 +1,17 @@
 <!DOCTYPE html> 
 <html>
 <head>
-	<meta name="hound" charset="utf-8">
-	<title>Hound sse test</title>
+    <meta name="hound" charset="utf-8">
+    <title>Hound sse test</title>
 </head>
 <body>
     <h1>Session Events</h1>
-    <input id="sessionId" placeholder="session id">
-    <button onclick="start()">Connect</button>
-    <button onclick="stop()">Stop Session</button>
+    <input id="targetSec" type="number" placeholder="target seconds">
+    <button onclick="startSession()">startSession</button>
+    <button onclick="stopSession()">Stop Session</button>
     <div id="activeStep">None</div>
     <pre id="log"></pre>
-   <script>
-    let es;
-
-    function start() {
-        const id = document.getElementById("sessionId").value;
-        es = new EventSource(`/sessions/${id}/events`);
-
-        es.onmessage = (e) => {
-            const data = JSON.parse(e.data);
-
-            // Update active step
-            document.getElementById("activeStep").textContent =
-                `Step ${data.index + 1}: ${data.elapsed}s elapsed`;
-
-            // If elapsed matches step duration (from session data), log as completed
-            // This requires fetching session or keeping track on frontend
-            if (data.elapsed >= (window.currentStepDurations?.[data.index] || Infinity)) {
-                document.getElementById("log").textContent +=
-                    `Step ${data.index + 1} completed\n`;
-            }
-        };
-
-        es.onerror = () => {
-            es.close();
-        };
-
-        // Optional: fetch session to know step durations
-        fetch(`/sessions/${id}`)
-            .then(res => res.json())
-            .then(session => {
-                window.currentStepDurations = session.Steps.map(s => s.Duration);
-            });
-    }
-
-    function stop() {
-        const id = document.getElementById("sessionId").value;
-        fetch(`/sessions/${id}/stop`, { method: "POST" });
-        document.getElementById("activeStep").textContent = "Session stopped";
-        if (es) es.close();
-    }
-    </script>   
+    <script src="/static/main.js"></script>
 </body>    
 </html>
 
