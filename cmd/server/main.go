@@ -29,15 +29,18 @@ func main() {
 	r.Get("/sessions/{id}/events", httpapi.StreamSessionEvents(manager))
 	r.Get("/sessions/{id}/status", getSessionStatus(manager))
 
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./static/index.html")
-	})
-
+	r.Get("/", serveIndex)
 	fs := http.FileServer(http.Dir("./static"))
 	r.Handle("/static/*", http.StripPrefix("/static/", fs))
 
 	log.Println("listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", r))
+	if err := http.ListenAndServe(":8080", r); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func serveIndex(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "./static/index.html")
 }
 
 func startSession(m *runner.SessionManager) http.HandlerFunc {
@@ -47,19 +50,22 @@ func startSession(m *runner.SessionManager) http.HandlerFunc {
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			respondError(w, "Invalid request body", http.StatusBadRequest)
 			return
 		}
 
-		s := domain.NewSession("", "", req.TargetSec)
-
-		if err := m.StartSession(s); err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
+		if req.TargetSec <= 0 {
+			respondError(w, "targetec must be positive", http.StatusBadRequest)
 			return
 		}
 
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(s)
+		session := domain.NewSession("", "", req.TargetSec)
+
+		if err := m.StartSession(session); err != nil {
+			respondError(w, err.Error(), http.StatusConflict)
+			return
+		}
+		respondJSON(w, session, http.StatusCreated)
 	}
 }
 
@@ -67,13 +73,13 @@ func getSession(m *runner.SessionManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 
-		s, ok := m.GetSession(id)
+		session, ok := m.GetSession(id)
 		if !ok {
-			http.Error(w, "not found", http.StatusNotFound)
+			respondError(w, "sessionnot found", http.StatusNotFound)
 			return
 		}
 
-		json.NewEncoder(w).Encode(s)
+		respondJSON(w, session, http.StatusOK)
 	}
 }
 
@@ -81,31 +87,32 @@ func getSessionStatus(m *runner.SessionManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 
-		s, ok := m.GetSession(id)
+		session, ok := m.GetSession(id)
 		if !ok {
-			http.Error(w, "not found", http.StatusNotFound)
+			respondError(w, "session not found", http.StatusNotFound)
 			return
 		}
 
-		resp := struct {
+		status := struct {
 			ID        string `json:"id"`
 			Completed bool   `json:"completed"`
 			Current   int    `json:"currentStep"`
 		}{
-			ID:        s.ID,
-			Completed: s.Completed,
-			Current:   s.CurrentIdx,
+			ID:        session.ID,
+			Completed: session.Completed,
+			Current:   session.CurrentIdx,
 		}
 
-		json.NewEncoder(w).Encode(resp)
+		respondJSON(w, status, http.StatusOK)
 	}
 }
 
 func stopSession(m *runner.SessionManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
+
 		if err := m.StopSession(id); err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			respondError(w, err.Error(), http.StatusNotFound)
 			return
 		}
 
@@ -116,16 +123,15 @@ func stopSession(m *runner.SessionManager) http.HandlerFunc {
 func startStep(m *runner.SessionManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		idxStr := chi.URLParam(r, "idx")
+		stepIdx, err := parseStepIndex(r)
 
-		stepIdx, err := strconv.Atoi(idxStr)
 		if err != nil {
-			http.Error(w, "invalid step index", http.StatusBadRequest)
+			respondError(w, "invalid step index", http.StatusBadRequest)
 			return
 		}
 
 		if err := m.StartStep(id, stepIdx); err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			respondError(w, err.Error(), http.StatusNotFound)
 			return
 		}
 
@@ -136,19 +142,36 @@ func startStep(m *runner.SessionManager) http.HandlerFunc {
 func stopStep(m *runner.SessionManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		idxStr := chi.URLParam(r, "idx")
-
-		stepIdx, err := strconv.Atoi(idxStr)
+		stepIdx, err := parseStepIndex(r)
 		if err != nil {
-			http.Error(w, "invalid step index", http.StatusBadRequest)
+			respondError(w, "invalid step index", http.StatusBadRequest)
 			return
 		}
 
 		if err := m.StopStep(id, stepIdx); err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			respondError(w, err.Error(), http.StatusNotFound)
 			return
 		}
 
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+func parseStepIndex(r *http.Request) (int, error) {
+	idxStr := chi.URLParam(r, "idx")
+	return strconv.Atoi(idxStr)
+}
+
+func respondJSON(w http.ResponseWriter, data any, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("failed to encode response: %v", err)
+	}
+}
+
+func respondError(w http.ResponseWriter, message string, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
