@@ -1,0 +1,39 @@
+<!DOCTYPE> 
+<html>
+<<head>
+	<meta name="hound" charset="utf-8">
+	<title>Hound sse test</title>
+</head>
+<body>
+    <h1>Session Events</h1>
+    <input id="sessionId" placeholder="session id">
+    <button onclick="start()">Connect</button>
+    <button onclick="stop()">Stop Session</button>
+
+    <pre id="log"></pre>
+    
+    <script>
+    	let es;
+
+	function start() {
+	    const id = document.getElementById("sessionId").value;
+	    es = new EventSource(`/sessions/${id}/events`);
+
+	    es.onmessage = (e) => {
+		const data = JSON.parse(e.data)
+		document.getElementById("log").textContent +=
+		    JSON.stringify(data, null, 2) + "\n\n";
+	    };
+	    es.onerror = () => {
+		es.close();
+	    };
+	}
+
+	function stop() {
+	    const id = document.getElementById("sessionId").value;
+	    fetch(`/sessions/${id}/stop`, { method: "POST"});
+	}
+    </script>
+</body>    
+</html>>
+

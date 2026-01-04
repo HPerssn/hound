@@ -25,6 +25,13 @@ func main() {
 	r.Post("/sessions{id}/stop", stopSession(manager))
 	r.Get("/sessions/{id}/events", httpapi.StreamSessionEvents(manager))
 
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./static/index.html")
+	})
+
+	fs := http.FileServer(http.Dir("./static"))
+	r.Handle("/static/*", http.StripPrefix("/static/", fs))
+
 	log.Println("listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
