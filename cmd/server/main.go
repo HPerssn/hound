@@ -22,7 +22,7 @@ func main() {
 
 	r.Post("/sessions", startSession(manager))
 	r.Get("/sessions/{id}", getSession(manager))
-	r.Post("/sessions{id}/stop", stopSession(manager))
+	r.Post("/sessions/{id}/stop", stopSession(manager))
 	r.Get("/sessions/{id}/events", httpapi.StreamSessionEvents(manager))
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {

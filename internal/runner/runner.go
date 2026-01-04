@@ -42,9 +42,10 @@ func (r *sessionRunner) Start() {
 
 			r.mu.Lock()
 			r.session.CurrentIdx = i
-			r.session.Steps[i].StartedAt = time.Now()
-			started := r.session.Steps[i].StartedAt
+			stepStart := time.Now()
 			r.mu.Unlock()
+
+			timer := time.NewTimer(time.Duration(r.session.Steps[i].Duration) * time.Second)
 
 			select {
 			case <-time.After(time.Duration(r.session.Steps[i].Duration) * time.Second):
@@ -53,15 +54,16 @@ func (r *sessionRunner) Start() {
 				step := r.session.Steps[i]
 				r.mu.Unlock()
 
-				elapsed := int(started.Sub(r.session.StartedAt).Seconds())
+				elapsed := int(time.Since(stepStart).Seconds())
 
 				r.events <- StepEvent{
 					Index:     step.Index,
 					Duration:  step.Duration,
 					Elapsed:   elapsed,
-					Completed: step.Completed,
+					Completed: true,
 				}
 			case <-r.ctx.Done():
+				timer.Stop()
 				return
 			}
 		}
