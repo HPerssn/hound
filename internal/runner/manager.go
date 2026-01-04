@@ -10,6 +10,7 @@ import (
 var (
 	ErrSessionExists   = errors.New("session already exists")
 	ErrSessionNotFound = errors.New("session not found")
+	ErrInvalidStep     = errors.New("invalid step index")
 )
 
 type SessionManager struct {
@@ -45,7 +46,6 @@ func (m *SessionManager) StartSession(s *domain.Session) error {
 
 	r := NewSessionRunner(s)
 	m.sessions[s.ID] = r
-	r.Start()
 
 	return nil
 }
@@ -73,4 +73,38 @@ func (m *SessionManager) GetSession(id string) (*domain.Session, bool) {
 		return nil, false
 	}
 	return r.Session(), true
+}
+
+func (m *SessionManager) StartStep(sessionID string, idx int) error {
+	m.mu.Lock()
+	r, exists := m.sessions[sessionID]
+	m.mu.Unlock()
+
+	if !exists {
+		return ErrSessionNotFound
+	}
+
+	sess := r.Session()
+	if idx < 0 || idx >= len(sess.Steps) {
+		return ErrInvalidStep
+	}
+
+	return r.StartStep(idx)
+}
+
+func (m *SessionManager) StopStep(sessionID string, idx int) error {
+	m.mu.Lock()
+	r, exists := m.sessions[sessionID]
+	m.mu.Unlock()
+
+	if !exists {
+		return ErrSessionNotFound
+	}
+
+	sess := r.Session()
+	if idx < 0 || idx >= len(sess.Steps) {
+		return ErrInvalidStep
+	}
+
+	return r.StopStep(idx)
 }

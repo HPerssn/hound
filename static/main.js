@@ -1,9 +1,11 @@
 let es;
 let sessionId;
+let sessionData;
 
 async function startSession() {
-    const targetSec = parseInt(document.getElementById("targetSec").value, 10);
-    if (!targetSec) return;
+    const targetMin = parseInt(document.getElementById("targetMin").value, 10);
+    if (!targetMin) return;
+    const targetSec = targetMin * 60;
 
     try {
         const res = await fetch('/sessions', {
@@ -14,13 +16,31 @@ async function startSession() {
 
         if (!res.ok) throw new Error("failed to start session");
 
-        const session = await res.json();
-        sessionId = session.ID;
+        sessionData = await res.json();
+        sessionId = sessionData.ID;
 
+        displaySteps(sessionData.Steps);
         connectToSession();
     } catch (err) {
         console.error(err);
     }
+}
+
+function displaySteps(steps) {
+    const container = document.getElementById("steps");
+    container.innerHTML = "";
+
+    steps.forEach(step => {
+        const div = document.createElement("div");
+        div.id = `step-${step.Index}`;
+        div.innerHTML = `
+            <span>Step ${step.Index + 1} - ${step.Duration}s</span>
+            <button onclick="startStep(${step.Index})">Start</button>
+            <button onclick="stopStep(${step.Index})">Stop</button>
+            <span id="timer-${step.Index}">0s</span>
+        `;
+        container.appendChild(div);
+    });
 }
 
 function connectToSession() {
@@ -32,21 +52,16 @@ function connectToSession() {
     es.onmessage = (e) => {
         const data = JSON.parse(e.data);
 
-        // active step timer
         if (data.index !== undefined && data.elapsed !== undefined) {
-            document.getElementById("activeStep").textContent =
-                `Step ${data.index + 1}: ${data.elapsed}s elapsed`;
+            const timerEl = document.getElementById(`timer-${data.index}`);
+            if (timerEl) timerEl.textContent = `${data.elapsed}s`;
         }
 
-        // log step completion from Step.Completed
         if (data.completed) {
-            document.getElementById("activeStep").textContent =
-                `Step ${data.index + 1} completed`;
-            document.getElementById("log").textContent +=
-                JSON.stringify(data, null, 2) + "\n\n";
+            const timerEl = document.getElementById(`timer-${data.index}`);
+            if (timerEl) timerEl.textContent = "Completed";
         }
 
-        // session done
         if (data.type === "done") {
             document.getElementById("activeStep").textContent = "Session finished";
         }
@@ -55,8 +70,29 @@ function connectToSession() {
     es.onerror = () => es.close();
 }
 
+async function startStep(idx) {
+    if (!sessionId) return;
+    try {
+        const res = await fetch(`/sessions/${sessionId}/steps/${idx}/start`, { method: "POST" });
+        if (!res.ok) throw new Error("failed to start step");
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+async function stopStep(idx) {
+    if (!sessionId) return;
+    try {
+        const res = await fetch(`/sessions/${sessionId}/steps/${idx}/stop`, { method: "POST" });
+        if (!res.ok) throw new Error("failed to stop step");
+    } catch (err) {
+        console.error(err);
+    }
+}
+
 async function stopSession() {
     if (!sessionId) return;
     await fetch(`/sessions/${sessionId}/stop`, { method: 'POST' });
     document.getElementById("activeStep").textContent = "Session stopped";
 }
+

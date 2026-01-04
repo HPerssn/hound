@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -22,6 +23,8 @@ func main() {
 
 	r.Post("/sessions", startSession(manager))
 	r.Get("/sessions/{id}", getSession(manager))
+	r.Post("/sessions/{id}/steps/{idx}/start", startStep(manager))
+	r.Post("/sessions/{id}/steps/{idx}/stop", stopStep(manager))
 	r.Post("/sessions/{id}/stop", stopSession(manager))
 	r.Get("/sessions/{id}/events", httpapi.StreamSessionEvents(manager))
 	r.Get("/sessions/{id}/status", getSessionStatus(manager))
@@ -102,6 +105,46 @@ func stopSession(m *runner.SessionManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		if err := m.StopSession(id); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func startStep(m *runner.SessionManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		idxStr := chi.URLParam(r, "idx")
+
+		stepIdx, err := strconv.Atoi(idxStr)
+		if err != nil {
+			http.Error(w, "invalid step index", http.StatusBadRequest)
+			return
+		}
+
+		if err := m.StartStep(id, stepIdx); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func stopStep(m *runner.SessionManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		idxStr := chi.URLParam(r, "idx")
+
+		stepIdx, err := strconv.Atoi(idxStr)
+		if err != nil {
+			http.Error(w, "invalid step index", http.StatusBadRequest)
+			return
+		}
+
+		if err := m.StopStep(id, stepIdx); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
