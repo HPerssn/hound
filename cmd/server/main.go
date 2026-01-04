@@ -24,6 +24,7 @@ func main() {
 	r.Get("/sessions/{id}", getSession(manager))
 	r.Post("/sessions/{id}/stop", stopSession(manager))
 	r.Get("/sessions/{id}/events", httpapi.StreamSessionEvents(manager))
+	r.Get("/sessions/{id}/status", getSessionStatus(manager))
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./static/index.html")
@@ -71,6 +72,30 @@ func getSession(m *runner.SessionManager) http.HandlerFunc {
 		}
 
 		json.NewEncoder(w).Encode(s)
+	}
+}
+
+func getSessionStatus(m *runner.SessionManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+
+		s, ok := m.GetSession(id)
+		if !ok {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+
+		resp := struct {
+			ID        string `json:"id"`
+			Completed bool   `json:"completed"`
+			Current   int    `json:"currentStep"`
+		}{
+			ID:        s.ID,
+			Completed: s.Completed,
+			Current:   s.CurrentIdx,
+		}
+
+		json.NewEncoder(w).Encode(resp)
 	}
 }
 

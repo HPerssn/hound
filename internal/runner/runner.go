@@ -8,13 +8,6 @@ import (
 	"github.com/hperssn/hound/internal/domain"
 )
 
-type StepEvent struct {
-	Index     int  `json:"index"`
-	Duration  int  `json:"duration"`
-	Elapsed   int  `json:"elapsed"`
-	Completed bool `json:"completed"`
-}
-
 type sessionRunner struct {
 	mu sync.Mutex
 
@@ -32,50 +25,60 @@ func NewSessionRunner(s *domain.Session) *sessionRunner {
 		session: s,
 		ctx:     ctx,
 		cancel:  cancel,
-		events:  make(chan StepEvent, len(s.Steps)), //buffered to avoid blocking runner when sending
+		events:  make(chan StepEvent, len(s.Steps)+1), //buffered to avoid blocking runner when sending
 	}
 }
 
 func (r *sessionRunner) Start() {
 	go func() {
 		for i := range r.session.Steps {
-
 			r.mu.Lock()
 			r.session.CurrentIdx = i
-			stepStart := time.Now()
+			r.session.Steps[i].StartedAt = time.Now()
+			step := r.session.Steps[i]
 			r.mu.Unlock()
 
-			timer := time.NewTimer(time.Duration(r.session.Steps[i].Duration) * time.Second)
+			ticker := time.NewTicker(1 * time.Second)
+			done := time.After(time.Duration(step.Duration) * time.Second)
 
-			select {
-			case <-time.After(time.Duration(r.session.Steps[i].Duration) * time.Second):
-				r.mu.Lock()
-				r.session.Steps[i].Completed = true
-				step := r.session.Steps[i]
-				r.mu.Unlock()
+		stepLoop:
+			for {
+				select {
+				case <-ticker.C:
+					elapsed := int(time.Since(step.StartedAt).Seconds())
+					select {
+					case r.events <- StepEvent{
+						Index:   step.Index,
+						Elapsed: elapsed,
+					}:
+					default:
+					}
 
-				elapsed := int(time.Since(stepStart).Seconds())
+				case <-done:
+					ticker.Stop()
+					r.mu.Lock()
+					r.session.Steps[i].Completed = true
+					r.mu.Unlock()
+					break stepLoop
 
-				r.events <- StepEvent{
-					Index:     step.Index,
-					Duration:  step.Duration,
-					Elapsed:   elapsed,
-					Completed: true,
+				case <-r.ctx.Done():
+					ticker.Stop()
+					close(r.events)
+					return
 				}
-			case <-r.ctx.Done():
-				timer.Stop()
-				return
 			}
 		}
+
 		r.mu.Lock()
 		r.session.Completed = true
 		r.mu.Unlock()
+
+		close(r.events)
 	}()
 }
 
 func (r *sessionRunner) Stop() {
 	r.cancel()
-	close(r.events)
 }
 
 func (r *sessionRunner) Events() <-chan StepEvent {
