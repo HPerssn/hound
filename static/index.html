@@ -1,6 +1,6 @@
-<!DOCTYPE> 
+<!DOCTYPE html> 
 <html>
-<<head>
+<head>
 	<meta name="hound" charset="utf-8">
 	<title>Hound sse test</title>
 </head>
@@ -16,8 +16,19 @@
     	let es;
 
 	function start() {
+	    document.getElementById("lgo").textContent = "";
 	    const id = document.getElementById("sessionId").value;
+	    if (es) {
+		es.close();
+	    }
+
+	    document.getElementById("lgo").textContent = "";
+
 	    es = new EventSource(`/sessions/${id}/events`);
+	    
+	    es.onopen = () => {
+		document.getElementById("log").textContent += "Connected\n\n"
+	    }
 
 	    es.onmessage = (e) => {
 		const data = JSON.parse(e.data)
@@ -35,5 +46,5 @@
 	}
     </script>
 </body>    
-</html>>
+</html>
 
