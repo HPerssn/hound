@@ -56,3 +56,34 @@ func TestSessionRunner_Stop(t *testing.T) {
 		t.Errorf("session should not be marked completed after Stop()")
 	}
 }
+
+func TestStopSession(t *testing.T) {
+	manager := runner.NewSessionManager()
+	s := domain.NewSession("stop-test", "", 10)
+
+	if err := manager.StartSession(s); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(2 * time.Second)
+
+	if err := manager.StopSession(s.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	sess, ok := manager.GetSession(s.ID)
+	if !ok {
+		t.Fatal("session not found after stop")
+	}
+
+	if sess.Completed {
+		t.Errorf("session should not be marked completed after stop")
+	}
+
+	// Steps that did not finish should be incomplete
+	for i, step := range sess.Steps {
+		if step.Completed {
+			t.Logf("step %d completed before stop", i)
+		}
+	}
+}
