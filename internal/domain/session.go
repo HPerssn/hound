@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+const (
+	warmupPercentage = 0.15
+	minWarmupSec     = 5
+	maxWarmupSec     = 40
+)
+
 type Session struct {
 	ID         string
 	UserID     string
@@ -30,35 +36,33 @@ func warmupStepCount(targetSec int, r *rand.Rand) int {
 }
 
 func maxWarmupDuration(targetSec int) int {
-	max := int(float64(targetSec) * 0.15)
+	calculated := int(float64(targetSec) * warmupPercentage)
 
-	if max > 40 {
-		return 40
+	if calculated > maxWarmupSec {
+		return maxWarmupSec
 	}
-	if max < 5 {
-		return 5
+	if calculated < minWarmupSec {
+		return minWarmupSec
 	}
-	return max
+	return calculated
 }
 
 func GenerateSteps(targetSec int, r *rand.Rand) []Step {
-	warmups := warmupStepCount(targetSec, r)
+	warmupCount := warmupStepCount(targetSec, r)
 	maxWarmup := maxWarmupDuration(targetSec)
 
-	steps := make([]Step, warmups+1)
+	steps := make([]Step, warmupCount+1)
 
-	for i := 0; i < warmups; i++ {
+	for i := 0; i < warmupCount; i++ {
 		steps[i] = Step{
-			Index:     i,
-			Duration:  r.Intn(maxWarmup) + 1,
-			Completed: false,
+			Index:    i,
+			Duration: r.Intn(maxWarmup) + 1,
 		}
 	}
 
-	steps[warmups] = Step{
-		Index:     warmups,
-		Duration:  targetSec,
-		Completed: false,
+	steps[warmupCount] = Step{
+		Index:    warmupCount,
+		Duration: targetSec,
 	}
 
 	return steps
@@ -72,12 +76,10 @@ func NewSession(id string, userID string, targetSec int) *Session {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	return &Session{
-		ID:         id,
-		UserID:     userID,
-		TargetSec:  targetSec,
-		Steps:      GenerateSteps(targetSec, r),
-		CurrentIdx: 0,
-		StartedAt:  time.Now(),
-		Completed:  false,
+		ID:        id,
+		UserID:    userID,
+		TargetSec: targetSec,
+		Steps:     GenerateSteps(targetSec, r),
+		StartedAt: time.Now(),
 	}
 }
