@@ -1,19 +1,27 @@
-<!DOCTYPE html> 
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <meta name="hound" charset="utf-8">
-    <title>Hound sse test</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session Timer</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <h1>Session Events</h1>
-    <label for="targetMin">Final step target</label>
-    <input id="targetMin" type="number" placeholder="minutes" min="1">
-    <button onclick="startSession()">Start Session</button>
-    <button onclick="stopSession()">Stop Session</button>
-    <div id="activeStep">None</div>
-    <div id="steps"></div>
-    <pre id="log"></pre>
+    <div class="container">
+        <h1>Session Timer</h1>
+        <div id="controls">
+            <label for="targetMin">Target (mm:ss)</label>
+            <input id="targetMin" type="text" placeholder="05:00">
+            <button onclick="startSession()">Start Session</button>
+            <button onclick="stopSession()">Stop Session</button>
+        </div>
+        <div id="steps">
+            <!-- Steps will be added here dynamically -->
+        </div>
+        <div id="activeStep">No active step</div>
+        <pre id="log"></pre>
+    </div>
+    
     <script src="/static/main.js"></script>
-</body>    
+</body>
 </html>
-
