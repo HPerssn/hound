@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -17,7 +18,7 @@ import (
 
 func main() {
 
-	repo, err := storage.NewSQLiteRepository("./hound.db")
+	repo, err := initRepository()
 	if err != nil {
 		log.Fatal("failed to initialize database:", err)
 	}
@@ -52,6 +53,17 @@ func main() {
 
 func serveIndex(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "./static/index.html")
+}
+
+func initRepository() (storage.Repository, error) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL != "" {
+		log.Println("Using Postgres database")
+		return storage.NewPostgresRepository(dbURL) // implement this
+	}
+
+	log.Println("Using local SQLite database")
+	return storage.NewSQLiteRepository("./hound.db")
 }
 
 func startSession(m *runner.SessionManager) http.HandlerFunc {
