@@ -161,6 +161,14 @@ button:disabled {
     word-break: break-all;
 }
 
+.session-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
 #log {
     display: none;
 }

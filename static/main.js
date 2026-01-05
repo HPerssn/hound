@@ -142,3 +142,33 @@ async function stopSession() {
         alert(err.message);
     }
 }
+
+async function completeSession(successLevel) {
+    if (!sessionId) return;
+
+    const comment = prompt("Optional comment for this session:", "");
+
+    try {
+        const res = await fetch(`/sessions/${sessionId}/complete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                success: successLevel,
+                comment: comment || ""
+            })
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || "Failed to save session");
+        }
+
+        document.getElementById("activeStep").textContent = "Session saved";
+        if (es) es.close();
+        sessionId = null;
+
+    } catch (err) {
+        console.error(err);
+        alert(err.message);
+    }
+}

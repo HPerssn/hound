@@ -12,9 +12,16 @@ import (
 	"github.com/hperssn/hound/internal/domain"
 	"github.com/hperssn/hound/internal/http"
 	"github.com/hperssn/hound/internal/runner"
+	"github.com/hperssn/hound/internal/storage"
 )
 
 func main() {
+
+	repo, err := storage.NewSQLiteRepository("./hound.db")
+	if err != nil {
+		log.Fatal("failed to initialize database:", err)
+	}
+	defer repo.Close()
 	manager := runner.NewSessionManager()
 
 	r := chi.NewRouter()
@@ -23,11 +30,15 @@ func main() {
 
 	r.Post("/sessions", startSession(manager))
 	r.Get("/sessions/{id}", getSession(manager))
+	r.Post("/sessions/{id}/complete", completeSession(manager, repo))
 	r.Post("/sessions/{id}/steps/{idx}/start", startStep(manager))
 	r.Post("/sessions/{id}/steps/{idx}/stop", stopStep(manager))
 	r.Post("/sessions/{id}/stop", stopSession(manager))
 	r.Get("/sessions/{id}/events", httpapi.StreamSessionEvents(manager))
 	r.Get("/sessions/{id}/status", getSessionStatus(manager))
+
+	r.Get("/history", getHistory(repo))
+	r.Get("/stats", getStats(repo))
 
 	r.Get("/", serveIndex)
 	fs := http.FileServer(http.Dir("./static"))
@@ -80,6 +91,37 @@ func getSession(m *runner.SessionManager) http.HandlerFunc {
 		}
 
 		respondJSON(w, session, http.StatusOK)
+	}
+}
+
+func completeSession(m *runner.SessionManager, repo storage.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+
+		var req struct {
+			Success storage.SuccessLevel `json:"success"`
+			Comment string               `json:"comment"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		session, ok := m.GetSession(id)
+		if !ok {
+			respondError(w, "session not found", http.StatusNotFound)
+			return
+		}
+
+		record := storage.FromDomainSession(session, req.Success, req.Comment)
+		if err := repo.SaveSession(record); err != nil {
+			log.Printf("failed to save session: %v", err)
+			respondError(w, "failed to save session", http.StatusInternalServerError)
+			return
+		}
+
+		respondJSON(w, map[string]string{"status": "saved"}, http.StatusOK)
 	}
 }
 
@@ -157,6 +199,43 @@ func stopStep(m *runner.SessionManager) http.HandlerFunc {
 	}
 }
 
+func getHistory(repo storage.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := r.URL.Query().Get("userId")
+		if userID == "" {
+			userID = "" // Default to empty user for now
+		}
+
+		sessions, err := repo.GetSessionsByUser(userID)
+		if err != nil {
+			log.Printf("Failed to get history: %v", err)
+			respondError(w, "failed to retrieve history", http.StatusInternalServerError)
+			return
+		}
+
+		respondJSON(w, sessions, http.StatusOK)
+	}
+}
+
+func getStats(repo storage.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := r.URL.Query().Get("userId")
+		if userID == "" {
+			userID = "" // Default to empty user for now
+		}
+
+		stats, err := repo.GetSessionStats(userID)
+		if err != nil {
+			log.Printf("Failed to get stats: %v", err)
+			respondError(w, "failed to retrieve stats", http.StatusInternalServerError)
+			return
+		}
+
+		respondJSON(w, stats, http.StatusOK)
+	}
+}
+
+// helpers below
 func parseStepIndex(r *http.Request) (int, error) {
 	idxStr := chi.URLParam(r, "idx")
 	return strconv.Atoi(idxStr)
