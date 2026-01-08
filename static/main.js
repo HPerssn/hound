@@ -1,6 +1,52 @@
 let es;
 let sessionId;
 let sessionData;
+let notificationsEnabled = false;
+
+if ("Notification" in window) {
+    Notification.requestPermission().then(permission => {
+        notificationsEnabled = permission === "granted";
+    });
+}
+
+document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && sessionId) {
+        console.log("page became visible, reconnecting")
+        reconnectToSession();
+    }
+});
+
+function notifyUser(title, body) {
+    if (!notificationsEnabled || !("Notification" in window)) return;
+
+    //notify on phone lock/tab inactive
+    if (document.hidden) {
+        new Notification(title, {
+            body: body,
+            icon: "static/icon.png",
+            tag: "hound-timer"
+        });
+    }
+}
+
+function reconnectToSession() {
+    if (!sessionId) return;
+
+    if (es) {
+        es.close();
+    }
+
+    fetch(`/sessions/${sessionId}`)
+        .then(res => res.json())
+        .then(data => {
+            sessionData = data;
+            displaySteps(sessionData.Steps);
+            connectToSession();
+        })
+        .catch(err => {
+            console.error("Failed to reconnect:", err);
+        })
+}
 
 function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
@@ -11,7 +57,7 @@ function formatTime(seconds) {
 function parseTimeInput(timeStr) {
     if (!timeStr) return 0;
 
-    // Remove all whitespace
+
     timeStr = timeStr.trim();
 
     // Handle mm:ss format
@@ -22,7 +68,7 @@ function parseTimeInput(timeStr) {
         return mins * 60 + secs;
     }
 
-    // Handle plain numbers - if 3 or more digits, treat as mm:ss without colon
+
     // e.g., "503" becomes 5:03, "130" becomes 1:30
     if (timeStr.length >= 3) {
         const mins = parseInt(timeStr.slice(0, -2)) || 0;
@@ -30,7 +76,7 @@ function parseTimeInput(timeStr) {
         return mins * 60 + secs;
     }
 
-    // Handle 1-2 digit numbers as minutes
+
     const num = parseInt(timeStr);
     return isNaN(num) ? 0 : num * 60;
 }
@@ -100,10 +146,26 @@ function connectToSession() {
             const timerEl = document.getElementById(`timer-${data.index}`);
             if (timerEl) timerEl.textContent = formatTime(data.elapsed);
         }
+        if (sessionData && sessionData.Steps && sessionData.Steps[data.index]) {
+            const step = sessionData.Steps[data.index];
+
+
+            if (step.Duration - data.elapsed === 10) {
+                notifyUser(
+                    "Almost done!",
+                    `10 seconds left on step ${data.index + 1}`
+                );
+            }
+            if (data.elapsed >= step.Duration) {
+                notifyUser(
+                    "Step complete!",
+                    `Step ${data.index + 1} finished!`
+                );
+            }
+        }
     };
-    es.onerror = () => {
-        console.log("EventSource connection closed");
-        es.close();
+    es.onerror = (err) => {
+        console.log("EventSource connection closed:", err);
     }
 }
 
