@@ -2,11 +2,33 @@ let es;
 let sessionId;
 let sessionData;
 let notificationsEnabled = false;
+let userId;
+
+userId = localStorage.getItem('hound_userId');
+if (!userId) {
+    userId = crypto.randomUUID();
+    localStorage.setItem('hound_userId', userId);
+    console.log('Created new user ID:', userId);
+}
 
 if ("Notification" in window) {
     Notification.requestPermission().then(permission => {
         notificationsEnabled = permission === "granted";
     });
+}
+
+document.addEventListener("DOMContentLoaded", hydrateTargetInput);
+
+function hydrateTargetInput() {
+    fetch(`/next-target?userId=${userId}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data || !data.nextTarget || data.nextTarget <= 0) return;
+            document.getElementById("targetMin").value = formatTime(data.nextTarget);
+        })
+        .catch(err => {
+            console.error("Failed to hydrate target input:", err);
+        });
 }
 
 document.addEventListener("visibilitychange", () => {
@@ -83,18 +105,27 @@ function parseTimeInput(timeStr) {
 
 async function startSession() {
     const timeInput = document.getElementById("targetMin").value;
-    const targetSec = parseTimeInput(timeInput);
 
-    if (!targetSec || targetSec <= 0) {
-        alert("Please enter a valid target time (e.g., 05:00 or 5:00)");
-        return;
+    let targetSec = null;
+
+    if (timeInput && timeInput.trim() !== "") {
+        targetSec = parseTimeInput(timeInput);
+        if (!targetSec || targetSec <= 0) {
+            alert("Please enter a valid target time (e.g., 05:00 or 5:00)");
+            return;
+        }
     }
 
     try {
+        const body = { userId };
+        if (targetSec) {
+            body.targetSec = targetSec;
+        }
+
         const res = await fetch('/sessions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ targetSec })
+            body: JSON.stringify(body)
         });
 
         if (!res.ok) {
@@ -109,7 +140,8 @@ async function startSession() {
         }
 
         connectToSession();
-        document.getElementById("activeStep").textContent = `Session ${sessionId} started`;
+        const targetTime = formatTime(sessionData.targetSec);
+        document.getElementById("activeStep").textContent = `Session started - target: ${targetTime}`;
     } catch (err) {
         console.error("Error in startSession:", err);
         alert("Error starting session: " + err.message);
@@ -215,6 +247,7 @@ async function completeSession(successLevel) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+                userId: userId,
                 success: successLevel,
                 comment: comment || ""
             })

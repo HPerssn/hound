@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -14,6 +15,12 @@ import (
 	"github.com/hperssn/hound/internal/http"
 	"github.com/hperssn/hound/internal/runner"
 	"github.com/hperssn/hound/internal/storage"
+)
+
+const (
+	TargetGreat = 1.20
+	TargetOK    = 1.15
+	TargetFail  = 0.90
 )
 
 func main() {
@@ -29,7 +36,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	r.Post("/sessions", startSession(manager))
+	r.Post("/sessions", startSession(manager, repo))
 	r.Get("/sessions/{id}", getSession(manager))
 	r.Post("/sessions/{id}/complete", completeSession(manager, repo))
 	r.Post("/sessions/{id}/steps/{idx}/start", startStep(manager))
@@ -37,6 +44,7 @@ func main() {
 	r.Post("/sessions/{id}/stop", stopSession(manager))
 	r.Get("/sessions/{id}/events", httpapi.StreamSessionEvents(manager))
 	r.Get("/sessions/{id}/status", getSessionStatus(manager))
+	r.Get("/next-target", getNextTarget(repo))
 
 	r.Get("/history", getHistory(repo))
 	r.Get("/stats", getStats(repo))
@@ -59,36 +67,103 @@ func initRepository() (storage.Repository, error) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
 		log.Println("Using Postgres database")
-		return storage.NewPostgresRepository(dbURL) // implement this
+		return storage.NewPostgresRepository(dbURL)
 	}
 
 	log.Println("Using local SQLite database")
 	return storage.NewSQLiteRepository("./hound.db")
 }
 
-func startSession(m *runner.SessionManager) http.HandlerFunc {
+func startSession(m *runner.SessionManager, repo storage.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			TargetSec int `json:"targetSec"`
+			UserID    string `json:"userId"`
+			TargetSec *int   `json:"targetSec,omitempty"`
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondError(w, "Invalid request body", http.StatusBadRequest)
+			respondError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
-		if req.TargetSec <= 0 {
-			respondError(w, "targetec must be positive", http.StatusBadRequest)
+		if req.UserID == "" {
+			respondError(w, "userId is required", http.StatusBadRequest)
 			return
 		}
 
-		session := domain.NewSession("", "", req.TargetSec)
+		var targetSec int
+
+		if req.TargetSec != nil && *req.TargetSec > 0 {
+			targetSec = *req.TargetSec
+		} else {
+			calculated, err := calculateNextTarget(repo, req.UserID)
+			if err != nil {
+				log.Printf("Failed to calculate target: %v, using default", err)
+				targetSec = 300
+			} else {
+				targetSec = calculated
+			}
+		}
+
+		session := domain.NewSession("", req.UserID, targetSec)
 
 		if err := m.StartSession(session); err != nil {
 			respondError(w, err.Error(), http.StatusConflict)
 			return
 		}
+
 		respondJSON(w, session, http.StatusCreated)
+	}
+}
+
+func calculateNextTarget(repo storage.Repository, userID string) (int, error) {
+	sessions, err := repo.GetRecentSessions(userID, time.Now().AddDate(0, 0, -30))
+	if err != nil {
+		return 0, err
+	}
+
+	if len(sessions) == 0 {
+		return 300, nil // 5 minutes
+	}
+
+	lastSession := sessions[0]
+	lastTarget := lastSession.TargetSec
+
+	var next float64
+	switch lastSession.Success {
+	case storage.SuccessLevelGreat:
+		next = float64(lastTarget) * TargetGreat
+	case storage.SuccessLevelOK:
+		next = float64(lastTarget) * TargetOK
+	case storage.SuccessLevelFail:
+		next = float64(lastTarget) * TargetFail
+	default:
+		next = float64(lastTarget)
+	}
+
+	if next <= float64(lastTarget) && lastSession.Success != storage.SuccessLevelFail {
+		next = float64(lastTarget + 1)
+	}
+
+	return int(next), nil
+}
+
+func getNextTarget(repo storage.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := r.URL.Query().Get("userId")
+		if userID == "" {
+			respondError(w, "userId is required", http.StatusBadRequest)
+			return
+		}
+
+		target, err := calculateNextTarget(repo, userID)
+		if err != nil {
+			log.Printf("Failed to calculate next target: %v", err)
+			respondError(w, "failed to calculate next target", http.StatusInternalServerError)
+			return
+		}
+
+		respondJSON(w, map[string]int{"nextTarget": target}, http.StatusOK)
 	}
 }
 
