@@ -17,6 +17,20 @@ if ("Notification" in window) {
     });
 }
 
+document.addEventListener("DOMContentLoaded", hydrateTargetInput);
+
+function hydrateTargetInput() {
+    fetch(`/next-target?userId=${userId}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data || !data.nextTarget || data.nextTarget <= 0) return;
+            document.getElementById("targetMin").value = formatTime(data.nextTarget);
+        })
+        .catch(err => {
+            console.error("Failed to hydrate target input:", err);
+        });
+}
+
 document.addEventListener("visibilitychange", () => {
     if (!document.hidden && sessionId) {
         console.log("page became visible, reconnecting")
@@ -93,11 +107,12 @@ async function startSession() {
     const timeInput = document.getElementById("targetMin").value;
 
     let targetSec = null;
-    if (timeInput && parseTimeInput.trim()) {
+
+    if (timeInput && timeInput.trim() !== "") {
         targetSec = parseTimeInput(timeInput);
         if (!targetSec || targetSec <= 0) {
             alert("Please enter a valid target time (e.g., 05:00 or 5:00)");
-            return
+            return;
         }
     }
 
