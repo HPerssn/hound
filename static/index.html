@@ -3,15 +3,15 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Session Timer</title>
+    <title>Hound - Training timer</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
-        <h1>Session Timer</h1>
+        <h1>Session</h1>
         <div id="controls">
-            <label for="targetMin">Target (mm:ss)</label>
-            <input id="targetMin" type="text" placeholder="05:00">
+            <label for="targetMin">Target (mm:ss) - leave empty for auto</label>
+            <input id="targetMin" type="text" placeholder="05:00" autocomplete="off">
             <button onclick="startSession()">Start Session</button>
             <button onclick="stopSession()">Stop Session</button>
         </div>
@@ -20,9 +20,9 @@
         </div>
         <div id="activeStep">No active step</div>
 	<div class="session-actions">
-		<button onclick="completeSession('fail')">Complete (fail)</button>
-		<button onclick="completeSession('ok')">Complete (ok)</button>
-		<button onclick="completeSession('great')">Complete (great)</button>
+		<button onclick="completeSession('fail')">Mark as Failed</button>
+		<button onclick="completeSession('ok')">Mark as OK</button>
+		<button onclick="completeSession('great')">Mark as Great!</button>
 	</div>
         <pre id="log"></pre>
     </div>
