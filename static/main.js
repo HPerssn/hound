@@ -2,14 +2,6 @@ let es;
 let sessionId;
 let sessionData;
 let notificationsEnabled = false;
-let userId;
-
-userId = localStorage.getItem('hound_userId');
-if (!userId) {
-    userId = crypto.randomUUID();
-    localStorage.setItem('hound_userId', userId);
-    console.log('Created new user ID:', userId);
-}
 
 if ("Notification" in window) {
     Notification.requestPermission().then(permission => {
@@ -17,10 +9,31 @@ if ("Notification" in window) {
     });
 }
 
-document.addEventListener("DOMContentLoaded", hydrateTargetInput);
+function setActiveSession(id) {
+    sessionId = id;
+    if (id) {
+        sessionStorage.setItem('hound_activeSession', id);
+    } else {
+        sessionStorage.removeItem('hound_activeSession');
+    }
+}
+
+function getActiveSession() {
+    return sessionStorage.getItem('hound_activeSession');
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    hydrateTargetInput();
+
+    const activeSessionId = getActiveSession();
+    if (activeSessionId) {
+        sessionId = activeSessionId;
+        reconnectToSession();
+    }
+})
 
 function hydrateTargetInput() {
-    fetch(`/next-target?userId=${userId}`)
+    fetch('/next-target')
         .then(res => res.json())
         .then(data => {
             if (!data || !data.nextTarget || data.nextTarget <= 0) return;
@@ -30,6 +43,7 @@ function hydrateTargetInput() {
             console.error("Failed to hydrate target input:", err);
         });
 }
+
 
 document.addEventListener("visibilitychange", () => {
     if (!document.hidden && sessionId) {
@@ -59,14 +73,34 @@ function reconnectToSession() {
     }
 
     fetch(`/sessions/${sessionId}`)
-        .then(res => res.json())
+        .then(res => {
+            if (!res.ok) {
+                console.log("Session not found on server, clearing local reference");
+                setActiveSession(null);
+                document.getElementById("activeStep").textContent = "Session expired. Start a new session.";
+                document.getElementById("steps").innerHTML = "";
+                return null;
+            }
+            return res.json();
+        })
         .then(data => {
+            if (!data) return;
+
             sessionData = data;
             displaySteps(sessionData.Steps);
             connectToSession();
+
+            const targetTime = formatTime(sessionData.TargetSec);
+            if (sessionData.Completed) {
+                document.getElementById("activeStep").textContent = `Session completed - target was: ${targetTime}`;
+            } else {
+                document.getElementById("activeStep").textContent = `Session reconnected - target: ${targetTime}`;
+            }
         })
         .catch(err => {
             console.error("Failed to reconnect:", err);
+            setActiveSession(null);
+            document.getElementById("activeStep").textContent = "Connection failed. Start a new session.";
         })
 }
 
@@ -117,7 +151,7 @@ async function startSession() {
     }
 
     try {
-        const body = { userId };
+        const body = {};
         if (targetSec) {
             body.targetSec = targetSec;
         }
@@ -133,7 +167,7 @@ async function startSession() {
         }
 
         sessionData = await res.json();
-        sessionId = sessionData.ID;
+        setActiveSession(sessionData.ID);
 
         if (sessionData.Steps && sessionData.Steps.length > 0) {
             displaySteps(sessionData.Steps);
@@ -229,7 +263,7 @@ async function stopSession() {
             const err = await res.json();
             throw new Error(err.error || "Failed to stop session");
         }
-        document.getElementById("activeStep").textContent = "Session stopped";
+        document.getElementById("activeStep").textContent = "Session stopped, (not saved)";
         if (es) es.close();
     } catch (err) {
         console.error(err);
@@ -247,7 +281,6 @@ async function completeSession(successLevel) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                userId: userId,
                 success: successLevel,
                 comment: comment || ""
             })
@@ -260,7 +293,10 @@ async function completeSession(successLevel) {
 
         document.getElementById("activeStep").textContent = "Session saved";
         if (es) es.close();
-        sessionId = null;
+
+        setActiveSession(null);
+
+        hydrateTargetInput();
 
     } catch (err) {
         console.error(err);

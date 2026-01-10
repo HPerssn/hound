@@ -135,6 +135,28 @@ func (r *sessionRunner) Session() *domain.Session {
 	return &copy
 }
 
+func (r *sessionRunner) StopAllSteps() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, sc := range r.steps {
+		if !sc.paused {
+			sc.paused = true
+			select {
+			case <-sc.cancel:
+			default:
+				close(sc.cancel)
+			}
+		}
+	}
+}
+
+func (r *sessionRunner) MarkCompleted() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.session.Completed = true
+}
+
 func (r *sessionRunner) sendStepDone() {
 	r.mu.Lock()
 	defer r.mu.Unlock()

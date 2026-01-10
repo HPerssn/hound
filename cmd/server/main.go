@@ -12,7 +12,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/hperssn/hound/internal/domain"
-	"github.com/hperssn/hound/internal/http"
+	httpapi "github.com/hperssn/hound/internal/http"
 	"github.com/hperssn/hound/internal/runner"
 	"github.com/hperssn/hound/internal/storage"
 )
@@ -36,27 +36,38 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	r.Post("/sessions", startSession(manager, repo))
-	r.Get("/sessions/{id}", getSession(manager))
-	r.Post("/sessions/{id}/complete", completeSession(manager, repo))
-	r.Post("/sessions/{id}/steps/{idx}/start", startStep(manager))
-	r.Post("/sessions/{id}/steps/{idx}/stop", stopStep(manager))
-	r.Post("/sessions/{id}/stop", stopSession(manager))
-	r.Get("/sessions/{id}/events", httpapi.StreamSessionEvents(manager))
-	r.Get("/sessions/{id}/status", getSessionStatus(manager))
-	r.Get("/next-target", getNextTarget(repo))
-
-	r.Get("/history", getHistory(repo))
-	r.Get("/stats", getStats(repo))
-
 	r.Get("/", serveIndex)
+	r.Get("/health", healthCheck)
 	fs := http.FileServer(http.Dir("./static"))
 	r.Handle("/static/*", http.StripPrefix("/static/", fs))
+
+	r.Group(func(r chi.Router) {
+		r.Use(ExtractUserMiddleware)
+
+		r.Post("/sessions", startSession(manager, repo))
+		r.Get("/sessions/{id}", getSession(manager))
+		r.Post("/sessions/{id}/complete", completeSession(manager, repo))
+		r.Post("/sessions/{id}/steps/{idx}/start", startStep(manager))
+		r.Post("/sessions/{id}/steps/{idx}/stop", stopStep(manager))
+		r.Post("/sessions/{id}/stop", stopSession(manager))
+		r.Get("/sessions/{id}/events", httpapi.StreamSessionEvents(manager))
+		r.Get("/sessions/{id}/status", getSessionStatus(manager))
+		r.Get("/next-target", getNextTarget(repo))
+
+		r.Get("/history", getHistory(repo))
+		r.Get("/stats", getStats(repo))
+
+	})
 
 	log.Println("listening on :8080")
 	if err := http.ListenAndServe(":8080", r); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func healthCheck(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
 
 func serveIndex(w http.ResponseWriter, r *http.Request) {
@@ -76,18 +87,18 @@ func initRepository() (storage.Repository, error) {
 
 func startSession(m *runner.SessionManager, repo storage.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		userId := GetUserId(r)
+		if userId == "" {
+			respondError(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
 		var req struct {
-			UserID    string `json:"userId"`
-			TargetSec *int   `json:"targetSec,omitempty"`
+			TargetSec *int `json:"targetSec,omitempty"`
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			respondError(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-
-		if req.UserID == "" {
-			respondError(w, "userId is required", http.StatusBadRequest)
 			return
 		}
 
@@ -96,7 +107,7 @@ func startSession(m *runner.SessionManager, repo storage.Repository) http.Handle
 		if req.TargetSec != nil && *req.TargetSec > 0 {
 			targetSec = *req.TargetSec
 		} else {
-			calculated, err := calculateNextTarget(repo, req.UserID)
+			calculated, err := calculateNextTarget(repo, userId)
 			if err != nil {
 				log.Printf("Failed to calculate target: %v, using default", err)
 				targetSec = 300
@@ -105,7 +116,7 @@ func startSession(m *runner.SessionManager, repo storage.Repository) http.Handle
 			}
 		}
 
-		session := domain.NewSession("", req.UserID, targetSec)
+		session := domain.NewSession("", userId, targetSec)
 
 		if err := m.StartSession(session); err != nil {
 			respondError(w, err.Error(), http.StatusConflict)
@@ -150,13 +161,13 @@ func calculateNextTarget(repo storage.Repository, userID string) (int, error) {
 
 func getNextTarget(repo storage.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.URL.Query().Get("userId")
-		if userID == "" {
-			respondError(w, "userId is required", http.StatusBadRequest)
+		userId := GetUserId(r)
+		if userId == "" {
+			respondError(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		target, err := calculateNextTarget(repo, userID)
+		target, err := calculateNextTarget(repo, userId)
 		if err != nil {
 			log.Printf("Failed to calculate next target: %v", err)
 			respondError(w, "failed to calculate next target", http.StatusInternalServerError)
@@ -173,7 +184,7 @@ func getSession(m *runner.SessionManager) http.HandlerFunc {
 
 		session, ok := m.GetSession(id)
 		if !ok {
-			respondError(w, "sessionnot found", http.StatusNotFound)
+			respondError(w, "session not found", http.StatusNotFound)
 			return
 		}
 
@@ -206,6 +217,9 @@ func completeSession(m *runner.SessionManager, repo storage.Repository) http.Han
 			log.Printf("failed to save session: %v", err)
 			respondError(w, "failed to save session", http.StatusInternalServerError)
 			return
+		}
+		if err := m.CompleteSession(id); err != nil {
+			log.Printf("failed to mark session complete: %v", err)
 		}
 
 		respondJSON(w, map[string]string{"status": "saved"}, http.StatusOK)
@@ -288,9 +302,10 @@ func stopStep(m *runner.SessionManager) http.HandlerFunc {
 
 func getHistory(repo storage.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.URL.Query().Get("userId")
+		userID := GetUserId(r)
 		if userID == "" {
-			userID = "" // Default to empty user for now
+			respondError(w, "unauthorized", http.StatusUnauthorized)
+			return
 		}
 
 		sessions, err := repo.GetSessionsByUser(userID)
@@ -306,9 +321,10 @@ func getHistory(repo storage.Repository) http.HandlerFunc {
 
 func getStats(repo storage.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.URL.Query().Get("userId")
+		userID := GetUserId(r)
 		if userID == "" {
-			userID = "" // Default to empty user for now
+			respondError(w, "unauthorized", http.StatusUnauthorized)
+			return
 		}
 
 		stats, err := repo.GetSessionStats(userID)

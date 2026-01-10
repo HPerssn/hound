@@ -93,6 +93,21 @@ func (m *SessionManager) StopSession(id string) error {
 	return nil
 }
 
+func (m *SessionManager) CompleteSession(id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	r, exists := m.sessions[id]
+	if !exists {
+		return ErrSessionNotFound
+	}
+
+	r.MarkCompleted()
+	r.StopAllSteps()
+
+	return nil
+}
+
 func (m *SessionManager) GetSession(id string) (*domain.Session, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
