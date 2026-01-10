@@ -30,8 +30,8 @@ func ExtractUserMiddleware(next http.Handler) http.Handler {
 		//}
 
 		if userId == "" {
-			log.Printf("Authentication failed: no user header found")
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			log.Printf("missing auth header from traefik")
+			http.Error(w, "Auth misconfig", http.StatusInternalServerError)
 			return
 		}
 
