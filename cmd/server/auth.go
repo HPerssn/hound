@@ -24,10 +24,10 @@ func ExtractUserMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Development mode - uncomment to bypass auth locally
-		if userId == "" {
-			userId = "dev-user"
-			log.Println("Warning: No auth header, using dev-user")
-		}
+		//if userId == "" {
+		//	userId = "dev-user"
+		//	log.Println("Warning: No auth header, using dev-user")
+		//}
 
 		if userId == "" {
 			log.Printf("missing auth header from traefik")
