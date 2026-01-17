@@ -105,6 +105,9 @@ function reconnectToSession() {
 }
 
 function formatTime(seconds) {
+    if (!seconds || isNaN(seconds)) {
+        return "00:00"
+    }
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
@@ -174,7 +177,7 @@ async function startSession() {
         }
 
         connectToSession();
-        const targetTime = formatTime(sessionData.targetSec);
+        const targetTime = formatTime(sessionData.TargetSec);
         document.getElementById("activeStep").textContent = `Session started - target: ${targetTime}`;
     } catch (err) {
         console.error("Error in startSession:", err);
@@ -264,7 +267,10 @@ async function stopSession() {
             throw new Error(err.error || "Failed to stop session");
         }
         document.getElementById("activeStep").textContent = "Session stopped, (not saved)";
+        document.getElementById("steps").innerHTML = "";
         if (es) es.close();
+        setActiveSession(null);
+        sessionData = null;
     } catch (err) {
         console.error(err);
         alert(err.message);
@@ -292,9 +298,11 @@ async function completeSession(successLevel) {
         }
 
         document.getElementById("activeStep").textContent = "Session saved";
+        document.getElementById("steps").innerHTML = "";
         if (es) es.close();
 
         setActiveSession(null);
+        sessionData = null;
 
         hydrateTargetInput();
 
