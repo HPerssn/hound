@@ -48,3 +48,4 @@ Deployed to a **k3s cluster** using Kubernetes manifests.
 ```bash
 npm install
 npm run dev
+go run cmd/server/main.go
